@@ -5,8 +5,14 @@ struct ContentView: View {
     @StateObject private var webModel = TarotWebModel()
 
     var body: some View {
-        TarotWebView(model: webModel)
-            .ignoresSafeArea()
+        ZStack(alignment: .bottom) {
+            TarotWebView(model: webModel)
+                .ignoresSafeArea()
+
+            NativeTabBar(activeTab: $webModel.activeTab) { tab in
+                webModel.switchTo(tab)
+            }
+        }
         .background(Color.black)
     }
 }
