@@ -1,0 +1,15 @@
+{
+  "name": "思文塔罗",
+  "short_name": "思文塔罗",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#030706",
+  "theme_color": "#050807",
+  "icons": [
+    {
+      "src": "./assets/card-back.png",
+      "sizes": "1024x1024",
+      "type": "image/png"
+    }
+  ]
+}

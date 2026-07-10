@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#050807" />
+    <title>思文塔罗</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="stylesheet" href="./styles.css?v=20260710-tarot-restore" />
+  </head>
+  <body>
+    <main class="ritual-screen" id="ritualScreen">
+      <header class="topbar">
+        <button class="round-icon" id="soundButton" aria-label="声音">☾</button>
+        <div class="brand">
+          <h1>思文塔罗</h1>
+          <p>SIWEN TAROT</p>
+          <span>静心提问，聆听指引</span>
+        </div>
+        <button class="round-icon" id="resetButton" aria-label="重置">♙</button>
+      </header>
+
+      <section class="app-view active" data-view="home" id="intentionPanel">
+        <div class="hero-orbit" aria-hidden="true"></div>
+        <h2>把问题交给塔罗，<br />让答案慢慢浮现</h2>
+
+        <label class="question-box">
+          <span>✦ 你的问题 ✦</span>
+          <textarea id="questionInput" rows="3" placeholder="例如：我未来一年事业和财富的整体趋势是什么？"></textarea>
+        </label>
+
+        <section class="advisor-card" id="spreadAdvisor" hidden>
+          <span class="eyebrow">塔罗师建议牌阵</span>
+          <h3 id="spreadName"></h3>
+          <p id="spreadReason"></p>
+          <div class="position-list" id="spreadPositions"></div>
+        </section>
+
+        <button class="primary-button" id="advisorButton">✦ 让 AI 选择牌阵 ✦</button>
+        <button class="primary-button" id="beginButton" hidden>✦ 开始抽牌 ✦</button>
+
+        <div class="section-title"><span></span><b>常用牌阵</b><span></span></div>
+        <div class="spread-showcase" id="spreadShowcase"></div>
+      </section>
+
+      <section class="app-view" data-view="library" id="libraryPanel" hidden>
+        <div class="page-head">
+          <span class="eyebrow">78 张经典韦特塔罗</span>
+          <h2>牌库</h2>
+        </div>
+        <div class="library-grid" id="libraryGrid"></div>
+      </section>
+
+      <section class="app-view" data-view="daily" id="dailyPanel" hidden>
+        <div class="page-head">
+          <span class="eyebrow">Daily Oracle</span>
+          <h2>日签</h2>
+          <p>每天抽一张牌，作为今天的提醒。</p>
+        </div>
+        <button class="primary-button" id="dailyDrawButton">✦ 抽今日指引 ✦</button>
+        <div class="daily-result" id="dailyResult"></div>
+      </section>
+
+      <section class="app-view" data-view="profile" id="profilePanel" hidden>
+        <div class="page-head">
+          <span class="eyebrow">DeepSeek</span>
+          <h2>我的</h2>
+          <p>在这里保存 API 配置。密钥只存放在本机浏览器存储里。</p>
+        </div>
+        <form class="settings-form" id="apiSettingsForm">
+          <label>API Key<input id="apiKeyInput" type="password" autocomplete="off" placeholder="sk-..." /></label>
+          <label>模型<input id="apiModelInput" type="text" placeholder="deepseek-chat" /></label>
+          <label>接口地址<input id="apiBaseInput" type="url" placeholder="https://api.deepseek.com/chat/completions" /></label>
+          <button class="primary-button" type="submit">保存配置</button>
+          <p class="status-line" id="apiSettingsStatus"></p>
+        </form>
+      </section>
+
+      <section class="deck-stage" id="deckStage" hidden>
+        <button class="text-button" id="backHomeButton">返回问题</button>
+        <div class="deck-copy" id="ritualCopy"></div>
+        <button class="deck-button" id="deckButton">
+          <img src="./assets/card-back.png" alt="牌背" />
+          <span>轻触展开牌背</span>
+        </button>
+        <div class="draw-fan" id="drawFan"></div>
+        <div class="drawn-cards" id="drawnCards"></div>
+      </section>
+
+      <section class="reading-sheet" id="readingSheet" aria-hidden="true">
+        <div class="sheet-handle"></div>
+        <button class="close-button" id="closeReading" aria-label="关闭">×</button>
+        <h2 id="readingTitle">解读</h2>
+        <div class="reading-body" id="readingBody"></div>
+        <div class="follow-up-panel" id="followUpPanel" hidden>
+          <div class="follow-up-actions">
+            <button data-followup-prompt="我最需要立刻行动的一步是什么？">行动</button>
+            <button data-followup-prompt="这里最大的风险或盲点是什么？">风险</button>
+            <button data-followup-prompt="请把这次解读浓缩成三条提醒。">重点</button>
+            <button id="endReadingSession">结束</button>
+          </div>
+          <div class="follow-up-messages" id="followUpMessages"></div>
+          <form class="follow-up-form" id="followUpForm">
+            <input id="followUpInput" placeholder="继续追问这次牌局..." />
+            <button type="submit">发送</button>
+          </form>
+        </div>
+        <button class="primary-button" id="askDeepSeek">✦ 让 AI 解牌 ✦</button>
+      </section>
+
+      <nav class="bottom-nav">
+        <button class="active" data-nav="home">⌂<span>首页</span></button>
+        <button data-nav="library">▧<span>牌库</span></button>
+        <button data-nav="daily">✶<span>日签</span></button>
+        <button data-nav="profile">♙<span>我的</span></button>
+      </nav>
+    </main>
+    <script src="./app.js?v=20260710-tarot-restore"></script>
+  </body>
+</html>
