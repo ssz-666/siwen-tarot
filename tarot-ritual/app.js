@@ -243,7 +243,7 @@
     state.drawn = [];
     state.fanOpen = false;
     state.drawPool = shuffle(deck).slice(0, Math.min(Math.max(12, state.spread.positions.length + 6), 18));
-    $("ritualCopy").innerHTML = `<span>${escapeHtml(state.spread.name)}</span><b>需要抽 ${state.spread.positions.length} 张牌</b><small>先让牌背展开，再凭直觉选择。</small>`;
+    $("ritualCopy").innerHTML = `<span>正在展开牌背</span><b>凭直觉抽 ${state.spread.positions.length} 张。</b><small>${escapeHtml(state.spread.name)} · ${state.drawn.length}/${state.spread.positions.length} 已抽取</small>`;
     $("drawFan").innerHTML = "";
     $("drawnCards").innerHTML = "";
     $("deckButton").hidden = false;
@@ -251,6 +251,8 @@
     document.querySelectorAll(".app-view").forEach((panel) => panel.hidden = true);
     $("deckStage").hidden = false;
     $("deckStage").classList.add("active");
+    $("ritualScreen").classList.add("drawing-mode");
+    window.scrollTo({ top: 0, behavior: "auto" });
   }
 
   function expandDeck() {
@@ -278,6 +280,7 @@
       position: state.spread.positions[state.drawn.length],
       reversed: Math.random() > 0.72
     });
+    $("ritualCopy").innerHTML = `<span>${state.drawn.length}/${state.spread.positions.length} 已抽取</span><b>${state.drawn.length >= state.spread.positions.length ? "牌阵已经成形。" : `再抽 ${state.spread.positions.length - state.drawn.length} 张。`}</b><small>${escapeHtml(state.spread.name)}</small>`;
     renderDrawnCards();
     if (state.drawn.length === state.spread.positions.length) {
       setTimeout(() => showReading(false), 500);
@@ -399,6 +402,8 @@
   function switchView(view) {
     state.activeView = view;
     closeReading();
+    window.scrollTo({ top: 0, behavior: "auto" });
+    $("ritualScreen").classList.remove("drawing-mode");
     $("deckStage").hidden = true;
     $("deckStage").classList.remove("active");
     document.querySelectorAll(".app-view").forEach((panel) => {
