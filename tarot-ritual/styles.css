@@ -231,8 +231,9 @@ textarea::placeholder, input::placeholder { color: rgba(247, 236, 216, 0.36); }
 }
 .draw-fan {
   position: relative;
-  height: 250px;
+  height: 270px;
   margin-top: -78px;
+  perspective: 900px;
 }
 .fan-card {
   position: absolute;
@@ -243,37 +244,84 @@ textarea::placeholder, input::placeholder { color: rgba(247, 236, 216, 0.36); }
   padding: 0;
   background: transparent;
   transform-origin: 50% 120%;
+  will-change: transform, opacity, filter;
   animation: fanIn 520ms cubic-bezier(.2,.8,.2,1) both;
   animation-delay: var(--delay);
 }
-.fan-card img { width: 100%; border-radius: 9px; box-shadow: 0 18px 30px rgba(0, 0, 0, 0.46); }
-.fan-card:not(.picked) { transform: translateX(var(--x)) rotate(var(--angle)); }
-.fan-card.picked { opacity: 0.2; transform: translateX(var(--x)) rotate(var(--angle)) translateY(-26px); }
+.fan-card::after {
+  content: "";
+  position: absolute;
+  inset: -10px;
+  border-radius: 16px;
+  background: radial-gradient(circle, rgba(255, 224, 154, 0.5), transparent 64%);
+  opacity: 0;
+  transform: scale(0.72);
+  pointer-events: none;
+}
+.fan-card img { width: 100%; border-radius: 9px; box-shadow: 0 18px 30px rgba(0, 0, 0, 0.46); transition: filter 180ms ease, box-shadow 180ms ease; }
+.fan-card:not(.picked) { transform: translateX(var(--x)) rotate(var(--angle)); transition: transform 180ms cubic-bezier(.2,.8,.2,1), filter 180ms ease; }
+.fan-card:not(.picked):active { transform: translateX(var(--x)) rotate(var(--angle)) translateY(-18px) scale(1.08); filter: brightness(1.2); }
+.fan-card.picking {
+  z-index: 8;
+  animation: cardPick 560ms cubic-bezier(.18,.86,.2,1) both;
+}
+.fan-card.picking::after { animation: pickGlow 560ms ease-out both; }
+.fan-card.picked:not(.picking) { opacity: 0.18; transform: translateX(var(--x)) rotate(var(--angle)) translateY(-26px) scale(0.94); }
 @keyframes fanIn {
   from { transform: translateX(0) rotate(0deg) translateY(60px); opacity: 0; }
   to { transform: translateX(var(--x)) rotate(var(--angle)); opacity: 1; }
 }
+@keyframes cardPick {
+  0% { transform: translateX(var(--x)) rotate(var(--angle)); opacity: 1; }
+  24% { transform: translateX(var(--x)) rotate(var(--angle)) translateY(-34px) scale(1.12); opacity: 1; filter: brightness(1.28); }
+  100% { transform: translateX(var(--x)) rotate(var(--angle)) translateY(-92px) scale(0.82); opacity: 0.16; filter: brightness(0.72); }
+}
+@keyframes pickGlow {
+  0% { opacity: 0; transform: scale(0.72); }
+  38% { opacity: 0.9; transform: scale(1.18); }
+  100% { opacity: 0; transform: scale(1.6); }
+}
 
 .drawn-cards, .spread-layout, .library-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
-  gap: 14px;
+  gap: clamp(8px, 2vw, 14px);
   align-items: start;
 }
+.drawn-cards, .spread-layout {
+  grid-template-columns: repeat(var(--spread-cols, 3), minmax(0, 1fr));
+  grid-template-rows: repeat(var(--spread-rows, 1), auto);
+  max-width: min(100%, 900px);
+  margin-left: auto;
+  margin-right: auto;
+  justify-items: center;
+  align-items: center;
+  overflow-x: auto;
+  padding-inline: 2px;
+  perspective: 1100px;
+}
+.library-grid { grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); }
 .drawn-cards { margin-top: 18px; padding-bottom: 120px; }
 .tarot-result-card {
+  width: min(100%, 138px);
+  min-width: 0;
   border: 1px solid rgba(233, 191, 112, 0.34);
   border-radius: 18px;
-  padding: 12px;
+  padding: 10px;
   background: var(--panel);
   text-align: center;
-  transition: transform 280ms ease, border-color 280ms ease, box-shadow 280ms ease;
+  transform: rotate(var(--slot-rotate, 0deg));
+  transform-style: preserve-3d;
+  transition: transform 320ms cubic-bezier(.2,.8,.2,1), border-color 280ms ease, box-shadow 280ms ease;
 }
 .tarot-result-card.unrevealed {
   border-color: rgba(255, 223, 155, 0.48);
   box-shadow: 0 0 24px rgba(233, 191, 112, 0.12), inset 0 0 24px rgba(233, 191, 112, 0.05);
 }
-.tarot-result-card.revealed { animation: cardReveal 520ms cubic-bezier(.2,.8,.2,1) both; }
+.tarot-result-card.flipping {
+  border-color: rgba(255, 230, 171, 0.78);
+  box-shadow: 0 0 34px rgba(233, 191, 112, 0.24), inset 0 0 28px rgba(233, 191, 112, 0.08);
+}
+.tarot-result-card.revealed { animation: cardReveal 620ms cubic-bezier(.18,.86,.2,1) both; }
 .card-position { min-height: 38px; color: var(--gold); font-size: 13px; line-height: 1.4; }
 .reveal-card-button {
   display: block;
@@ -282,10 +330,24 @@ textarea::placeholder, input::placeholder { color: rgba(247, 236, 216, 0.36); }
   padding: 0;
   background: transparent;
   color: inherit;
+  perspective: 900px;
+}
+.flip-shell {
+  display: block;
+  transform-style: preserve-3d;
+  will-change: transform;
+}
+.tarot-result-card.flipping .flip-shell { animation: flipBack 720ms cubic-bezier(.18,.86,.2,1) both; }
+.reveal-card-button:active .flip-shell { transform: translateY(-8px) scale(1.04); }
+.reveal-card-button:disabled { opacity: 1; }
+.tarot-result-card.revealed .waite-card-image { animation: frontArrive 520ms cubic-bezier(.18,.86,.2,1) both; }
+.tarot-result-card.revealed .waite-card-image.reversed-image { animation-name: frontArriveReversed; }
+.spread-layout .tarot-result-card, .drawn-cards .tarot-result-card {
+  animation-delay: calc(var(--spread-row, 0) * 20ms);
 }
 .waite-card-image {
   width: 100%;
-  max-width: 180px;
+  max-width: 150px;
   aspect-ratio: 0.58;
   object-fit: cover;
   border-radius: 9px;
@@ -296,8 +358,21 @@ textarea::placeholder, input::placeholder { color: rgba(247, 236, 216, 0.36); }
 .tarot-result-card h3 { margin: 10px 0 5px; font-size: 16px; color: var(--gold-soft); }
 .tarot-result-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
 @keyframes cardReveal {
-  0% { transform: rotateY(85deg) scale(0.96); opacity: 0.4; }
-  100% { transform: rotateY(0) scale(1); opacity: 1; }
+  0% { transform: rotate(var(--slot-rotate, 0deg)) rotateY(88deg) scale(0.96); opacity: 0.45; }
+  100% { transform: rotate(var(--slot-rotate, 0deg)) rotateY(0) scale(1); opacity: 1; }
+}
+@keyframes flipBack {
+  0% { transform: rotateY(0) translateY(0) scale(1); filter: brightness(1); }
+  42% { transform: rotateY(82deg) translateY(-8px) scale(1.05); filter: brightness(1.35); }
+  100% { transform: rotateY(178deg) translateY(-4px) scale(1.02); filter: brightness(1.08); }
+}
+@keyframes frontArrive {
+  0% { transform: rotateY(-92deg) scale(1.04); filter: brightness(1.35); }
+  100% { transform: rotateY(0) scale(1); filter: brightness(1); }
+}
+@keyframes frontArriveReversed {
+  0% { transform: rotate(180deg) rotateY(-92deg) scale(1.04); filter: brightness(1.35); }
+  100% { transform: rotate(180deg) rotateY(0) scale(1); filter: brightness(1); }
 }
 
 .reading-sheet,

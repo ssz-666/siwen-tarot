@@ -313,19 +313,22 @@
     const card = state.drawPool.find((item) => item.id === cardId);
     if (!card || state.drawn.some((item) => item.id === cardId)) return;
     button.disabled = true;
-    button.classList.add("picked");
+    button.classList.add("picking", "picked");
+    hapticTap();
     state.drawn.push({
       ...card,
       position: state.spread.positions[state.drawn.length],
       reversed: Math.random() > 0.72,
-      revealed: false
+      revealed: false,
+      revealing: false
     });
     $("ritualCopy").innerHTML = `<span>${state.drawn.length}/${state.spread.positions.length} 已抽取</span><b>${state.drawn.length >= state.spread.positions.length ? "牌阵已摆好，逐张点开。" : `再抽 ${state.spread.positions.length - state.drawn.length} 张。`}</b><small>${escapeHtml(state.spread.name)}</small>`;
     renderDrawnCards();
   }
 
   function renderDrawnCards() {
-    $("drawnCards").className = `drawn-cards count-${state.drawn.length}`;
+    $("drawnCards").className = `drawn-cards spread-${state.spread.key} count-${state.drawn.length}`;
+    $("drawnCards").setAttribute("style", spreadGridStyle());
     $("drawnCards").innerHTML = state.drawn.map((card, index) => cardMarkup(card, index)).join("");
     $("drawnCards").querySelectorAll("[data-reveal-card]").forEach((button) => {
       button.addEventListener("click", () => revealCard(Number(button.dataset.revealCard)));
@@ -334,11 +337,12 @@
 
   function cardMarkup(card, index) {
     const isBack = !card.revealed;
+    const layout = spreadSlotStyle(index);
     return `
-      <article class="tarot-result-card${isBack ? " unrevealed" : " revealed"}">
+      <article class="tarot-result-card${isBack ? " unrevealed" : " revealed"}${card.revealing ? " flipping" : ""}" style="${layout}">
         <div class="card-position">${index + 1}. ${escapeHtml(card.position)}</div>
         ${isBack
-          ? `<button class="reveal-card-button" data-reveal-card="${index}" aria-label="翻开${escapeHtml(card.position)}"><img class="waite-card-image card-back-image" src="./assets/card-back.png" alt="牌背" /></button><h3>等待翻开</h3><p>轻触查看这张牌</p>`
+          ? `<button class="reveal-card-button" data-reveal-card="${index}" aria-label="翻开${escapeHtml(card.position)}" ${card.revealing ? "disabled" : ""}><span class="flip-shell"><img class="waite-card-image card-back-image" src="./assets/card-back.png" alt="牌背" /></span></button><h3>${card.revealing ? "正在翻开" : "等待翻开"}</h3><p>${card.revealing ? "牌面正在显现" : "轻触查看这张牌"}</p>`
           : `<img class="waite-card-image${card.reversed ? " reversed-image" : ""}" src="${card.image}" alt="${escapeHtml(card.name)}" /><h3>${escapeHtml(card.name)}${card.reversed ? " · 逆位" : " · 正位"}</h3><p>${escapeHtml(card.keyword)}</p>`}
       </article>
     `;
@@ -346,15 +350,21 @@
 
   function revealCard(index) {
     const card = state.drawn[index];
-    if (!card || card.revealed) return;
-    card.revealed = true;
+    if (!card || card.revealed || card.revealing) return;
+    card.revealing = true;
+    hapticTap();
     softChime();
     renderDrawnCards();
-    const revealed = state.drawn.filter((item) => item.revealed).length;
-    $("ritualCopy").innerHTML = `<span>${revealed}/${state.spread.positions.length} 已翻开</span><b>${revealed >= state.spread.positions.length ? "牌面已经全部显现。" : `继续翻开 ${state.spread.positions.length - revealed} 张。`}</b><small>${escapeHtml(state.spread.name)}</small>`;
-    if (revealed === state.spread.positions.length) {
-      setTimeout(() => showReading(false), 420);
-    }
+    setTimeout(() => {
+      card.revealed = true;
+      card.revealing = false;
+      renderDrawnCards();
+      const revealed = state.drawn.filter((item) => item.revealed).length;
+      $("ritualCopy").innerHTML = `<span>${revealed}/${state.spread.positions.length} 已翻开</span><b>${revealed >= state.spread.positions.length ? "牌面已经全部显现。" : `继续翻开 ${state.spread.positions.length - revealed} 张。`}</b><small>${escapeHtml(state.spread.name)}</small>`;
+      if (revealed === state.spread.positions.length) {
+        setTimeout(() => showReading(false), 460);
+      }
+    }, 360);
   }
 
   async function showReading(useAI) {
@@ -402,10 +412,70 @@
   function renderCardsSummary() {
     return `
       <div class="reading-question">${escapeHtml(state.question)}</div>
-      <div class="spread-layout spread-${state.spread.key}">
+      <div class="spread-layout spread-${state.spread.key}" style="${spreadGridStyle()}">
         ${state.drawn.map((card, index) => cardMarkup(card, index)).join("")}
       </div>
     `;
+  }
+
+  function spreadGridStyle() {
+    const layout = spreadLayoutConfig();
+    return `--spread-cols:${layout.columns};--spread-rows:${layout.rows};`;
+  }
+
+  function spreadSlotStyle(index) {
+    const layout = spreadLayoutConfig();
+    const slot = layout.slots[index] || autoSlot(index, layout.columns);
+    const column = slot.cs ? `${slot.c} / span ${slot.cs}` : String(slot.c);
+    const row = slot.rs ? `${slot.r} / span ${slot.rs}` : String(slot.r);
+    const rotate = slot.rotate ? `--slot-rotate:${slot.rotate}deg;` : "";
+    return `grid-column:${column};grid-row:${row};${rotate}`;
+  }
+
+  function spreadLayoutConfig() {
+    const key = state.spread?.key || "three";
+    const count = state.spread?.positions.length || 3;
+    const layouts = {
+      single: { columns: 1, rows: 1, slots: [{ c: 1, r: 1 }] },
+      three: { columns: 3, rows: 1, slots: [{ c: 1, r: 1 }, { c: 2, r: 1 }, { c: 3, r: 1 }] },
+      choice: { columns: 3, rows: 4, slots: [{ c: 2, r: 1 }, { c: 1, r: 2 }, { c: 3, r: 2 }, { c: 2, r: 3 }, { c: 2, r: 4 }] },
+      career: crossFiveLayout(),
+      money: crossFiveLayout(),
+      cross: crossFiveLayout(),
+      shadow: crossFiveLayout(),
+      innerchild: crossFiveLayout(),
+      calling: crossFiveLayout(),
+      relationship: { columns: 3, rows: 2, slots: [{ c: 1, r: 1 }, { c: 3, r: 1 }, { c: 2, r: 1 }, { c: 1, r: 2 }, { c: 3, r: 2 }, { c: 2, r: 2 }] },
+      conflict: { columns: 3, rows: 2, slots: [{ c: 1, r: 1 }, { c: 3, r: 1 }, { c: 2, r: 1 }, { c: 1, r: 2 }, { c: 3, r: 2 }, { c: 2, r: 2 }] },
+      yesno: squareFourLayout(),
+      mindbody: squareFourLayout(),
+      newmoon: squareFourLayout(),
+      fullmoon: squareFourLayout(),
+      horseshoe: { columns: 5, rows: 3, slots: [{ c: 1, r: 3 }, { c: 1, r: 2 }, { c: 2, r: 1 }, { c: 3, r: 1 }, { c: 4, r: 1 }, { c: 5, r: 2 }, { c: 5, r: 3 }] },
+      week: { columns: 7, rows: 1, slots: Array.from({ length: 7 }, (_, i) => ({ c: i + 1, r: 1 })) },
+      chakra: { columns: 7, rows: 1, slots: Array.from({ length: 7 }, (_, i) => ({ c: i + 1, r: 1 })) },
+      month: { columns: 3, rows: 2, slots: Array.from({ length: 6 }, (_, i) => ({ c: (i % 3) + 1, r: Math.floor(i / 3) + 1 })) },
+      celtic: { columns: 4, rows: 4, slots: [{ c: 2, r: 2 }, { c: 2, r: 2, rotate: 90 }, { c: 2, r: 3 }, { c: 2, r: 1 }, { c: 1, r: 2 }, { c: 3, r: 2 }, { c: 4, r: 1 }, { c: 4, r: 2 }, { c: 4, r: 3 }, { c: 4, r: 4 }] },
+      zodiac: { columns: 4, rows: 4, slots: [{ c: 2, r: 1 }, { c: 3, r: 1 }, { c: 4, r: 2 }, { c: 4, r: 3 }, { c: 3, r: 4 }, { c: 2, r: 4 }, { c: 1, r: 3 }, { c: 1, r: 2 }, { c: 1, r: 1 }, { c: 4, r: 1 }, { c: 4, r: 4 }, { c: 1, r: 4 }] }
+    };
+    return layouts[key] || autoLayout(count);
+  }
+
+  function crossFiveLayout() {
+    return { columns: 3, rows: 3, slots: [{ c: 2, r: 2 }, { c: 1, r: 2 }, { c: 2, r: 1 }, { c: 3, r: 2 }, { c: 2, r: 3 }] };
+  }
+
+  function squareFourLayout() {
+    return { columns: 2, rows: 2, slots: [{ c: 1, r: 1 }, { c: 2, r: 1 }, { c: 1, r: 2 }, { c: 2, r: 2 }] };
+  }
+
+  function autoLayout(count) {
+    const columns = Math.min(Math.max(count, 1), 4);
+    return { columns, rows: Math.ceil(count / columns), slots: Array.from({ length: count }, (_, index) => autoSlot(index, columns)) };
+  }
+
+  function autoSlot(index, columns) {
+    return { c: (index % columns) + 1, r: Math.floor(index / columns) + 1 };
   }
 
   async function readWithDeepSeek() {
@@ -768,6 +838,10 @@
     osc.start();
     gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.5);
     osc.stop(ctx.currentTime + 0.52);
+  }
+
+  function hapticTap() {
+    if (navigator.vibrate) navigator.vibrate(18);
   }
 
   function escapeHtml(value) {
