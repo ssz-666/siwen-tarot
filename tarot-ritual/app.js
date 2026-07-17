@@ -82,7 +82,10 @@
     drawn: [],
     fanOpen: false,
     readingText: "",
-    conversation: []
+    conversation: [],
+    detailSpread: null,
+    spreadChoice: null,
+    streaming: false
   };
 
   const deck = buildDeck();
@@ -104,10 +107,12 @@
     $("deckButton").addEventListener("click", expandDeck);
     $("askDeepSeek").addEventListener("click", () => showReading(true));
     $("closeReading").addEventListener("click", closeReading);
+    $("closeSpreadDetail").addEventListener("click", closeSpreadDetail);
+    $("useSpreadFromDetail").addEventListener("click", useDetailSpread);
     $("backHomeButton").addEventListener("click", () => switchView("home"));
     $("resetButton").addEventListener("click", resetRitual);
     $("soundButton").addEventListener("click", softChime);
-    $("questionInput").addEventListener("input", prepareForNewQuestion);
+    $("questionInput").addEventListener("input", () => prepareForNewQuestion(false));
     $("dailyDrawButton").addEventListener("click", drawDaily);
     $("apiSettingsForm").addEventListener("submit", saveApiSettings);
     $("followUpForm").addEventListener("submit", submitFollowUp);
@@ -129,6 +134,15 @@
 
   function spread(key, name, reason, positions) {
     return { key, name, reason, positions };
+  }
+
+  function spreadIntro(item) {
+    const count = item.positions.length;
+    if (count === 1) return "适合在你已经有明确问题时，快速抓住今天最重要的一句提醒。使用时先安静下来，把问题缩短成一句话，再抽一张。";
+    if (count <= 3) return "适合时间线、现状梳理和轻量咨询。重点不是把未来说死，而是看清事情如何从过去延伸到现在，并给出下一步方向。";
+    if (count <= 6) return "适合一件具体事情的深度拆解。它会同时看见资源、阻碍、隐藏变量和行动建议，适合事业、关系、财富等现实问题。";
+    if (count <= 8) return "适合中周期或能量结构的观察。每个位置都对应一个维度，解读时要先逐张看，再合并成整体节奏。";
+    return "适合重大、长期、复合型议题。牌数较多，信息量大，更适合年度趋势、人生方向或一个阶段的系统复盘。";
   }
 
   function buildDeck() {
@@ -164,6 +178,7 @@
     $("advisorButton").textContent = "塔罗师正在判断...";
     $("advisorButton").disabled = true;
     state.spread = await chooseSpreadWithAI(question);
+    state.spreadChoice = "ai";
     renderSpreadAdvice();
     $("advisorButton").hidden = true;
     $("beginButton").hidden = false;
@@ -223,17 +238,40 @@
       <button class="spread-tile" data-spread="${item.key}">
         <b>${escapeHtml(item.name)}</b>
         <span>${item.positions.length} 张 · ${escapeHtml(item.positions.slice(0, 3).join(" / "))}</span>
+        <small>查看介绍</small>
       </button>
     `).join("");
     $("spreadShowcase").addEventListener("click", (event) => {
       const tile = event.target.closest("[data-spread]");
       if (!tile) return;
-      state.spread = getSpread(tile.dataset.spread);
-      state.spread = { ...state.spread, reason: `你手动选择了${state.spread.name}。` };
-      renderSpreadAdvice();
-      $("advisorButton").hidden = true;
-      $("beginButton").hidden = false;
+      openSpreadDetail(getSpread(tile.dataset.spread));
     });
+  }
+
+  function openSpreadDetail(item) {
+    state.detailSpread = item;
+    $("spreadDetailTitle").textContent = `${item.name} · ${item.positions.length} 张`;
+    $("spreadDetailReason").textContent = `${item.reason} ${spreadIntro(item)}`;
+    $("spreadDetailPositions").innerHTML = item.positions.map((pos, index) => `<span>${index + 1}. ${escapeHtml(pos)}</span>`).join("");
+    $("spreadDetailSheet").classList.add("open");
+    $("spreadDetailSheet").setAttribute("aria-hidden", "false");
+  }
+
+  function closeSpreadDetail() {
+    $("spreadDetailSheet").classList.remove("open");
+    $("spreadDetailSheet").setAttribute("aria-hidden", "true");
+  }
+
+  function useDetailSpread() {
+    if (!state.detailSpread) return;
+    state.spread = { ...state.detailSpread, reason: `你手动选择了${state.detailSpread.name}。${state.detailSpread.reason}` };
+    state.spreadChoice = "manual";
+    state.question = $("questionInput").value.trim();
+    closeSpreadDetail();
+    renderSpreadAdvice();
+    $("advisorButton").hidden = true;
+    $("beginButton").hidden = false;
+    $("beginButton").scrollIntoView({ block: "center", behavior: "smooth" });
   }
 
   function beginRitual() {
@@ -241,6 +279,7 @@
     if (!$("spreadAdvisor").hidden) renderSpreadAdvice();
     if (!state.spread) state.spread = getSpread("three");
     state.drawn = [];
+    state.readingText = "";
     state.fanOpen = false;
     state.drawPool = shuffle(deck).slice(0, Math.min(Math.max(12, state.spread.positions.length + 6), 18));
     $("ritualCopy").innerHTML = `<span>正在展开牌背</span><b>凭直觉抽 ${state.spread.positions.length} 张。</b><small>${escapeHtml(state.spread.name)} · ${state.drawn.length}/${state.spread.positions.length} 已抽取</small>`;
@@ -278,29 +317,44 @@
     state.drawn.push({
       ...card,
       position: state.spread.positions[state.drawn.length],
-      reversed: Math.random() > 0.72
+      reversed: Math.random() > 0.72,
+      revealed: false
     });
-    $("ritualCopy").innerHTML = `<span>${state.drawn.length}/${state.spread.positions.length} 已抽取</span><b>${state.drawn.length >= state.spread.positions.length ? "牌阵已经成形。" : `再抽 ${state.spread.positions.length - state.drawn.length} 张。`}</b><small>${escapeHtml(state.spread.name)}</small>`;
+    $("ritualCopy").innerHTML = `<span>${state.drawn.length}/${state.spread.positions.length} 已抽取</span><b>${state.drawn.length >= state.spread.positions.length ? "牌阵已摆好，逐张点开。" : `再抽 ${state.spread.positions.length - state.drawn.length} 张。`}</b><small>${escapeHtml(state.spread.name)}</small>`;
     renderDrawnCards();
-    if (state.drawn.length === state.spread.positions.length) {
-      setTimeout(() => showReading(false), 500);
-    }
   }
 
   function renderDrawnCards() {
     $("drawnCards").className = `drawn-cards count-${state.drawn.length}`;
     $("drawnCards").innerHTML = state.drawn.map((card, index) => cardMarkup(card, index)).join("");
+    $("drawnCards").querySelectorAll("[data-reveal-card]").forEach((button) => {
+      button.addEventListener("click", () => revealCard(Number(button.dataset.revealCard)));
+    });
   }
 
   function cardMarkup(card, index) {
+    const isBack = !card.revealed;
     return `
-      <article class="tarot-result-card">
+      <article class="tarot-result-card${isBack ? " unrevealed" : " revealed"}">
         <div class="card-position">${index + 1}. ${escapeHtml(card.position)}</div>
-        <img class="waite-card-image${card.reversed ? " reversed-image" : ""}" src="${card.image}" alt="${escapeHtml(card.name)}" />
-        <h3>${escapeHtml(card.name)}${card.reversed ? " · 逆位" : " · 正位"}</h3>
-        <p>${escapeHtml(card.keyword)}</p>
+        ${isBack
+          ? `<button class="reveal-card-button" data-reveal-card="${index}" aria-label="翻开${escapeHtml(card.position)}"><img class="waite-card-image card-back-image" src="./assets/card-back.png" alt="牌背" /></button><h3>等待翻开</h3><p>轻触查看这张牌</p>`
+          : `<img class="waite-card-image${card.reversed ? " reversed-image" : ""}" src="${card.image}" alt="${escapeHtml(card.name)}" /><h3>${escapeHtml(card.name)}${card.reversed ? " · 逆位" : " · 正位"}</h3><p>${escapeHtml(card.keyword)}</p>`}
       </article>
     `;
+  }
+
+  function revealCard(index) {
+    const card = state.drawn[index];
+    if (!card || card.revealed) return;
+    card.revealed = true;
+    softChime();
+    renderDrawnCards();
+    const revealed = state.drawn.filter((item) => item.revealed).length;
+    $("ritualCopy").innerHTML = `<span>${revealed}/${state.spread.positions.length} 已翻开</span><b>${revealed >= state.spread.positions.length ? "牌面已经全部显现。" : `继续翻开 ${state.spread.positions.length - revealed} 张。`}</b><small>${escapeHtml(state.spread.name)}</small>`;
+    if (revealed === state.spread.positions.length) {
+      setTimeout(() => showReading(false), 420);
+    }
   }
 
   async function showReading(useAI) {
@@ -310,16 +364,30 @@
     $("followUpPanel").hidden = true;
     $("askDeepSeek").hidden = false;
     if (!state.drawn.length) return;
+    if (state.drawn.some((card) => !card.revealed)) {
+      $("readingBody").innerHTML = `<div class="reading-question">请先逐张翻开所有牌，再开始解读。</div>`;
+      $("askDeepSeek").hidden = true;
+      return;
+    }
     $("readingBody").innerHTML = renderCardsSummary();
     if (!useAI) return;
     $("askDeepSeek").disabled = true;
     $("askDeepSeek").textContent = "AI 正在解牌...";
+    state.streaming = true;
+    const streamTarget = document.createElement("div");
+    streamTarget.className = "interpretation streaming-text";
+    streamTarget.innerHTML = "<p>正在连接塔罗师...</p>";
+    $("readingBody").appendChild(streamTarget);
     try {
-      state.readingText = await readWithDeepSeek();
+      state.readingText = await readWithDeepSeekStream((partial) => {
+        streamTarget.innerHTML = renderTextBlocks(partial, true);
+        streamTarget.scrollIntoView({ block: "end", behavior: "smooth" });
+      });
     } catch (error) {
       state.readingText = localReading();
+      await typeText(streamTarget, state.readingText);
     }
-    $("readingBody").innerHTML = renderCardsSummary() + renderTextBlocks(state.readingText);
+    streamTarget.innerHTML = renderTextBlocks(state.readingText, true);
     $("followUpPanel").hidden = false;
     state.conversation = [
       { role: "user", content: state.question },
@@ -328,6 +396,7 @@
     $("askDeepSeek").hidden = true;
     $("askDeepSeek").disabled = false;
     $("askDeepSeek").textContent = "✦ 让 AI 解牌 ✦";
+    state.streaming = false;
   }
 
   function renderCardsSummary() {
@@ -347,6 +416,14 @@
     ], 0.45, 4200);
   }
 
+  async function readWithDeepSeekStream(onDelta) {
+    const cards = state.drawn.map((card, index) => `${index + 1}.${card.position}：${card.name}${card.reversed ? "逆位" : "正位"}，关键词：${card.keyword}`).join("\n");
+    return requestDeepSeekStream([
+      { role: "system", content: "你是一位经验丰富、温柔但不含糊的塔罗师。请用中文完整解读，包含总览、逐张牌、整合建议、未来行动。避免绝对化预测和医疗法律金融断言。" },
+      { role: "user", content: `我的问题：${state.question}\n牌阵：${state.spread.name}\n抽到的牌：\n${cards}\n请给我一份完整但好读的解牌。` }
+    ], 0.45, 4200, onDelta);
+  }
+
   async function submitFollowUp(event) {
     event.preventDefault();
     const input = $("followUpInput");
@@ -357,11 +434,14 @@
     appendFollowUp("ai", "正在继续看这组牌...");
     try {
       const cards = state.drawn.map((card, index) => `${index + 1}.${card.position}：${card.name}${card.reversed ? "逆位" : "正位"}`).join("\n");
-      const answer = await requestDeepSeekText([
+      const holder = $("followUpMessages").querySelector(".ai:last-child");
+      const answer = await requestDeepSeekStream([
         { role: "system", content: "你延续同一次塔罗牌局回答追问，只能基于已抽到的牌继续解释。中文回答，清晰、具体、不过度神秘化。" },
         ...state.conversation.slice(-8),
         { role: "user", content: `原问题：${state.question}\n牌：\n${cards}\n追问：${question}` }
-      ], 0.42, 1800);
+      ], 0.42, 1800, (partial) => {
+        if (holder) holder.textContent = partial || "正在继续看这组牌...";
+      });
       state.conversation.push({ role: "user", content: question }, { role: "assistant", content: answer });
       replaceLastFollowUp(answer);
     } catch (error) {
@@ -384,13 +464,14 @@
   }
 
   function endReadingSession() {
-    closeReading();
     prepareForNewQuestion(true);
+    switchView("home");
     $("questionInput").focus();
   }
 
-  function renderTextBlocks(text) {
-    return `<div class="interpretation">${escapeHtml(text).split(/\n{2,}/).map((part) => `<p>${part.replace(/\n/g, "<br>")}</p>`).join("")}</div>`;
+  function renderTextBlocks(text, innerOnly) {
+    const html = escapeHtml(text || "").split(/\n{2,}/).filter(Boolean).map((part) => `<p>${part.replace(/\n/g, "<br>")}</p>`).join("") || "<p>正在展开解读...</p>";
+    return innerOnly ? html : `<div class="interpretation">${html}</div>`;
   }
 
   function localReading() {
@@ -412,6 +493,7 @@
       panel.classList.toggle("active", active);
     });
     document.querySelectorAll("[data-nav]").forEach((button) => button.classList.toggle("active", button.dataset.nav === view));
+    closeSpreadDetail();
     if (view === "library") renderLibrary();
     if (view === "profile") loadApiSettings();
   }
@@ -495,20 +577,109 @@
     }).then((json) => json.choices?.[0]?.message?.content || "");
   }
 
+  function requestDeepSeekStream(messages, temperature, maxTokens, onDelta) {
+    const apiKey = localStorage.getItem(storage.apiKey);
+    const model = localStorage.getItem(storage.model) || "deepseek-chat";
+    const baseURL = localStorage.getItem(storage.base) || "https://api.deepseek.com/chat/completions";
+    if (!apiKey) return Promise.reject(new Error("Missing API key"));
+    const payload = { id: `dss-${Date.now()}-${Math.random().toString(16).slice(2)}`, apiKey, model, baseURL, messages, temperature, maxTokens };
+    if (window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.deepseekStream) {
+      return new Promise((resolve, reject) => {
+        let full = "";
+        const listener = (event) => {
+          if (!event.detail || event.detail.id !== payload.id) return;
+          if (event.detail.delta) {
+            full += event.detail.delta;
+            onDelta(full);
+          }
+          if (event.detail.error) {
+            window.removeEventListener("deepseek-stream", listener);
+            reject(new Error(event.detail.error));
+          }
+          if (event.detail.done) {
+            window.removeEventListener("deepseek-stream", listener);
+            if (full.trim()) resolve(full);
+            else reject(new Error("Empty DeepSeek stream"));
+          }
+        };
+        window.addEventListener("deepseek-stream", listener);
+        window.webkit.messageHandlers.deepseekStream.postMessage(payload);
+      });
+    }
+    return fetch(baseURL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+      body: JSON.stringify({ model, messages, temperature, max_tokens: maxTokens, stream: true })
+    }).then(async (response) => {
+      if (!response.ok || !response.body) throw new Error(`DeepSeek ${response.status}`);
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let full = "";
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        for (const rawLine of lines) {
+          const line = rawLine.trim();
+          if (!line.startsWith("data:")) continue;
+          const data = line.slice(5).trim();
+          if (!data || data === "[DONE]") continue;
+          const json = safeJson(data);
+          const delta = json?.choices?.[0]?.delta?.content || "";
+          if (delta) {
+            full += delta;
+            onDelta(full);
+          }
+        }
+      }
+      if (!full.trim()) throw new Error("Empty DeepSeek stream");
+      return full;
+    });
+  }
+
+  async function typeText(container, text) {
+    let current = "";
+    const step = Math.max(2, Math.ceil(text.length / 160));
+    for (let index = 0; index < text.length; index += step) {
+      current = text.slice(0, index + step);
+      container.innerHTML = renderTextBlocks(current, true);
+      if (index % (step * 10) === 0) container.scrollIntoView({ block: "end", behavior: "smooth" });
+      await new Promise((resolve) => setTimeout(resolve, 14));
+    }
+  }
+
   function prepareForNewQuestion(force) {
+    const forced = force === true;
+    const currentQuestion = $("questionInput").value.trim();
+    const hasActiveSession = state.drawn.length || state.drawPool.length || state.readingText;
+    const hasChosenSpread = !$("spreadAdvisor").hidden && !$("beginButton").hidden;
+    if (!forced && hasChosenSpread && !hasActiveSession) {
+      if (state.spreadChoice === "manual") {
+        state.question = currentQuestion;
+        return;
+      }
+      if (currentQuestion === state.question) return;
+    }
+    if (!forced && !state.question && !hasActiveSession) return;
     const hasPreviousState = !$("spreadAdvisor").hidden || !$("beginButton").hidden || state.drawn.length || state.drawPool.length || state.readingText;
-    if (!force && !hasPreviousState) return;
+    if (!forced && !hasPreviousState) return;
     state.drawn = [];
     state.drawPool = [];
     state.fanOpen = false;
     state.readingText = "";
     state.conversation = [];
+    state.spreadChoice = null;
+    state.streaming = false;
     $("spreadAdvisor").hidden = true;
     $("advisorButton").hidden = false;
     $("beginButton").hidden = true;
     $("drawFan").innerHTML = "";
     $("drawnCards").innerHTML = "";
     $("followUpMessages").innerHTML = "";
+    closeSpreadDetail();
     closeReading();
   }
 

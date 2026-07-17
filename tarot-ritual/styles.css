@@ -189,10 +189,7 @@ textarea::placeholder, input::placeholder { color: rgba(247, 236, 216, 0.36); }
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 12px;
-  max-height: 148px;
-  overflow: hidden;
-  -webkit-mask-image: linear-gradient(#000 0 68%, transparent);
-  mask-image: linear-gradient(#000 0 68%, transparent);
+  padding-bottom: 18px;
 }
 .spread-tile {
   min-height: 112px;
@@ -205,6 +202,7 @@ textarea::placeholder, input::placeholder { color: rgba(247, 236, 216, 0.36); }
 }
 .spread-tile b { display: block; color: var(--gold-soft); font-size: 18px; margin-bottom: 8px; }
 .spread-tile span { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.spread-tile small { display: block; margin-top: 12px; color: var(--gold); font-size: 12px; }
 
 .deck-stage {
   position: relative;
@@ -262,15 +260,29 @@ textarea::placeholder, input::placeholder { color: rgba(247, 236, 216, 0.36); }
   gap: 14px;
   align-items: start;
 }
-.drawn-cards { margin-top: 24px; padding-bottom: 120px; }
+.drawn-cards { margin-top: 18px; padding-bottom: 120px; }
 .tarot-result-card {
   border: 1px solid rgba(233, 191, 112, 0.34);
   border-radius: 18px;
   padding: 12px;
   background: var(--panel);
   text-align: center;
+  transition: transform 280ms ease, border-color 280ms ease, box-shadow 280ms ease;
 }
+.tarot-result-card.unrevealed {
+  border-color: rgba(255, 223, 155, 0.48);
+  box-shadow: 0 0 24px rgba(233, 191, 112, 0.12), inset 0 0 24px rgba(233, 191, 112, 0.05);
+}
+.tarot-result-card.revealed { animation: cardReveal 520ms cubic-bezier(.2,.8,.2,1) both; }
 .card-position { min-height: 38px; color: var(--gold); font-size: 13px; line-height: 1.4; }
+.reveal-card-button {
+  display: block;
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: inherit;
+}
 .waite-card-image {
   width: 100%;
   max-width: 180px;
@@ -279,13 +291,19 @@ textarea::placeholder, input::placeholder { color: rgba(247, 236, 216, 0.36); }
   border-radius: 9px;
   box-shadow: 0 14px 34px rgba(0, 0, 0, 0.48);
 }
+.card-back-image { filter: drop-shadow(0 0 18px rgba(233, 191, 112, 0.2)); }
 .waite-card-image.reversed-image { transform: rotate(180deg); }
 .tarot-result-card h3 { margin: 10px 0 5px; font-size: 16px; color: var(--gold-soft); }
 .tarot-result-card p { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+@keyframes cardReveal {
+  0% { transform: rotateY(85deg) scale(0.96); opacity: 0.4; }
+  100% { transform: rotateY(0) scale(1); opacity: 1; }
+}
 
-.reading-sheet {
+.reading-sheet,
+.spread-detail-sheet {
   position: fixed;
-  z-index: 10;
+  z-index: 30;
   left: 0;
   right: 0;
   bottom: 0;
@@ -299,7 +317,7 @@ textarea::placeholder, input::placeholder { color: rgba(247, 236, 216, 0.36); }
   background: linear-gradient(180deg, rgba(17, 20, 17, 0.98), rgba(4, 7, 6, 0.98));
   box-shadow: 0 -20px 70px rgba(0, 0, 0, 0.64);
 }
-.reading-sheet.open { transform: translateY(0); }
+.reading-sheet.open, .spread-detail-sheet.open { transform: translateY(0); }
 .sheet-handle { width: 48px; height: 4px; margin: 2px auto 10px; border-radius: 99px; background: rgba(247, 236, 216, 0.24); }
 .close-button {
   position: absolute;
@@ -314,6 +332,8 @@ textarea::placeholder, input::placeholder { color: rgba(247, 236, 216, 0.36); }
   font-size: 24px;
 }
 .reading-sheet h2 { margin: 10px 44px 18px; font-size: 28px; text-align: left; }
+.spread-detail-sheet h2 { margin: 8px 44px 14px 0; font-size: 30px; text-align: left; }
+.spread-detail-sheet p { color: rgba(247, 236, 216, 0.78); line-height: 1.75; margin: 0 0 18px; }
 .reading-question {
   margin-bottom: 16px;
   padding: 14px;
@@ -327,6 +347,17 @@ textarea::placeholder, input::placeholder { color: rgba(247, 236, 216, 0.36); }
   line-height: 1.85;
   font-size: 16px;
 }
+.streaming-text p:last-child::after {
+  content: "";
+  display: inline-block;
+  width: 0.55em;
+  height: 1em;
+  margin-left: 4px;
+  border-right: 1px solid var(--gold-soft);
+  vertical-align: -0.12em;
+  animation: cursorBlink 780ms steps(2, start) infinite;
+}
+@keyframes cursorBlink { 50% { opacity: 0; } }
 .follow-up-panel {
   margin-top: 20px;
   border-top: 1px solid rgba(233, 191, 112, 0.22);
@@ -414,6 +445,6 @@ textarea::placeholder, input::placeholder { color: rgba(247, 236, 216, 0.36); }
 @media (min-width: 720px) {
   .spread-showcase { grid-template-columns: repeat(3, 1fr); }
   .library-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .reading-sheet { left: 50%; right: auto; width: min(720px, 100vw); transform: translate(-50%, 105%); }
-  .reading-sheet.open { transform: translate(-50%, 0); }
+  .reading-sheet, .spread-detail-sheet { left: 50%; right: auto; width: min(720px, 100vw); transform: translate(-50%, 105%); }
+  .reading-sheet.open, .spread-detail-sheet.open { transform: translate(-50%, 0); }
 }

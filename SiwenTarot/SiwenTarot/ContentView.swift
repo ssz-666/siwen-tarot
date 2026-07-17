@@ -171,6 +171,7 @@ struct TarotWebView: UIViewRepresentable {
         let configuration = WKWebViewConfiguration()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.userContentController.add(context.coordinator, name: "deepseek")
+        configuration.userContentController.add(context.coordinator, name: "deepseekStream")
         configuration.userContentController.addUserScript(WKUserScript(
             source: "document.documentElement.classList.add('ios-native-shell');",
             injectionTime: .atDocumentEnd,
@@ -208,13 +209,14 @@ struct TarotWebView: UIViewRepresentable {
     final class Coordinator: NSObject, WKScriptMessageHandler {
         weak var webView: WKWebView?
         private weak var model: TarotWebModel?
+        private var streamDelegates: [String: StreamDelegate] = [:]
 
         init(model: TarotWebModel) {
             self.model = model
         }
 
         func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
-            guard message.name == "deepseek",
+            guard message.name == "deepseek" || message.name == "deepseekStream",
                   let payload = message.body as? [String: Any],
                   let id = payload["id"] as? String,
                   let apiKey = payload["apiKey"] as? String,
@@ -226,6 +228,7 @@ struct TarotWebView: UIViewRepresentable {
             }
             let temperature = payload["temperature"] as? Double ?? 0.28
             let maxTokens = payload["maxTokens"] as? Int ?? 4200
+            let shouldStream = message.name == "deepseekStream"
 
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
@@ -235,8 +238,18 @@ struct TarotWebView: UIViewRepresentable {
                 "model": model,
                 "messages": messages,
                 "temperature": temperature,
-                "max_tokens": maxTokens
+                "max_tokens": maxTokens,
+                "stream": shouldStream
             ])
+
+            if shouldStream {
+                let delegate = StreamDelegate(id: id, webView: webView) { [weak self] finishedID in
+                    self?.streamDelegates[finishedID] = nil
+                }
+                streamDelegates[id] = delegate
+                URLSession(configuration: .default, delegate: delegate, delegateQueue: nil).dataTask(with: request).resume()
+                return
+            }
 
             URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
                 var result: [String: Any] = ["id": id]
@@ -261,6 +274,64 @@ struct TarotWebView: UIViewRepresentable {
                     self?.webView?.evaluateJavaScript("window.dispatchEvent(new CustomEvent('deepseek-response', { detail: \(jsonString) }));")
                 }
             }.resume()
+        }
+
+        final class StreamDelegate: NSObject, URLSessionDataDelegate {
+            private let id: String
+            private weak var webView: WKWebView?
+            private let onFinish: (String) -> Void
+            private var buffer = ""
+
+            init(id: String, webView: WKWebView?, onFinish: @escaping (String) -> Void) {
+                self.id = id
+                self.webView = webView
+                self.onFinish = onFinish
+            }
+
+            func urlSession(_ session: URLSession, dataTask: URLSessionDataTask, didReceive data: Data) {
+                guard let chunk = String(data: data, encoding: .utf8) else { return }
+                buffer += chunk
+                let parts = buffer.components(separatedBy: "\n")
+                buffer = parts.last ?? ""
+                for rawLine in parts.dropLast() {
+                    let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard line.hasPrefix("data:") else { continue }
+                    let payload = line.dropFirst(5).trimmingCharacters(in: .whitespacesAndNewlines)
+                    if payload == "[DONE]" {
+                        dispatch(["id": id, "done": true])
+                        onFinish(id)
+                        return
+                    }
+                    guard let data = payload.data(using: .utf8),
+                          let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                          let choices = json["choices"] as? [[String: Any]],
+                          let delta = choices.first?["delta"] as? [String: Any],
+                          let content = delta["content"] as? String,
+                          !content.isEmpty else {
+                        continue
+                    }
+                    dispatch(["id": id, "delta": content])
+                }
+            }
+
+            func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+                if let error {
+                    dispatch(["id": id, "error": error.localizedDescription])
+                } else {
+                    dispatch(["id": id, "done": true])
+                }
+                onFinish(id)
+            }
+
+            private func dispatch(_ detail: [String: Any]) {
+                guard let encoded = try? JSONSerialization.data(withJSONObject: detail),
+                      let jsonString = String(data: encoded, encoding: .utf8) else {
+                    return
+                }
+                DispatchQueue.main.async { [weak self] in
+                    self?.webView?.evaluateJavaScript("window.dispatchEvent(new CustomEvent('deepseek-stream', { detail: \(jsonString) }));")
+                }
+            }
         }
     }
 }
