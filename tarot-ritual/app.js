@@ -411,16 +411,16 @@
   async function readWithDeepSeek() {
     const cards = state.drawn.map((card, index) => `${index + 1}.${card.position}：${card.name}${card.reversed ? "逆位" : "正位"}，关键词：${card.keyword}`).join("\n");
     return requestDeepSeekText([
-      { role: "system", content: "你是一位经验丰富、温柔但不含糊的塔罗师。请用中文完整解读，包含总览、逐张牌、整合建议、未来行动。避免绝对化预测和医疗法律金融断言。" },
-      { role: "user", content: `我的问题：${state.question}\n牌阵：${state.spread.name}\n抽到的牌：\n${cards}\n请给我一份完整但好读的解牌。` }
+      { role: "system", content: tarotReaderSystemPrompt() },
+      { role: "user", content: tarotReadingUserPrompt(cards) }
     ], 0.45, 4200);
   }
 
   async function readWithDeepSeekStream(onDelta) {
     const cards = state.drawn.map((card, index) => `${index + 1}.${card.position}：${card.name}${card.reversed ? "逆位" : "正位"}，关键词：${card.keyword}`).join("\n");
     return requestDeepSeekStream([
-      { role: "system", content: "你是一位经验丰富、温柔但不含糊的塔罗师。请用中文完整解读，包含总览、逐张牌、整合建议、未来行动。避免绝对化预测和医疗法律金融断言。" },
-      { role: "user", content: `我的问题：${state.question}\n牌阵：${state.spread.name}\n抽到的牌：\n${cards}\n请给我一份完整但好读的解牌。` }
+      { role: "system", content: tarotReaderSystemPrompt() },
+      { role: "user", content: tarotReadingUserPrompt(cards) }
     ], 0.45, 4200, onDelta);
   }
 
@@ -436,7 +436,7 @@
       const cards = state.drawn.map((card, index) => `${index + 1}.${card.position}：${card.name}${card.reversed ? "逆位" : "正位"}`).join("\n");
       const holder = $("followUpMessages").querySelector(".ai:last-child");
       const answer = await requestDeepSeekStream([
-        { role: "system", content: "你延续同一次塔罗牌局回答追问，只能基于已抽到的牌继续解释。中文回答，清晰、具体、不过度神秘化。" },
+        { role: "system", content: followUpSystemPrompt() },
         ...state.conversation.slice(-8),
         { role: "user", content: `原问题：${state.question}\n牌：\n${cards}\n追问：${question}` }
       ], 0.42, 1800, (partial) => {
@@ -474,10 +474,58 @@
     return innerOnly ? html : `<div class="interpretation">${html}</div>`;
   }
 
+  function tarotReaderSystemPrompt() {
+    return [
+      "你是一位有多年实占经验的专业塔罗师，表达方式像面对面咨询：温和、清晰、具体，不故弄玄虚。",
+      "你要把牌面翻译成普通人听得懂的话，避免空泛词、鸡汤、恐吓、宿命论和过度神秘化。",
+      "解读必须紧扣用户问题、牌阵位置、正逆位和牌与牌之间的关系。不要只解释单张牌字典含义。",
+      "输出结构固定为：",
+      "1. 先给一句话结论：直接回答这个问题目前最重要的趋势或提醒。",
+      "2. 牌阵整体：用 2-3 段说明这组牌在讲什么，指出主线、矛盾和转机。",
+      "3. 逐张牌解读：每张牌都按“牌位含义 -> 这张牌在这里说明什么 -> 对用户意味着什么”来讲，语言要白话。",
+      "4. 综合建议：给出 3 条可执行行动，每条都具体到可以今天或本周去做。",
+      "5. 可以继续追问的方向：给 2-3 个适合追问的问题。",
+      "涉及健康、法律、投资、重大财务时，只能给自我觉察和行动提醒，不能替代专业意见或保证结果。",
+      "中文输出，段落清楚，语气像一位可靠的塔罗咨询师。"
+    ].join("\n");
+  }
+
+  function tarotReadingUserPrompt(cards) {
+    return [
+      `我的问题：${state.question}`,
+      `牌阵：${state.spread.name}`,
+      `牌位：${state.spread.positions.join(" / ")}`,
+      "抽到的牌：",
+      cards,
+      "请按照系统要求，用通俗易懂但专业的方式完整解读。重点是让我听懂：这组牌为什么这样说、我现在该怎么判断、下一步怎么做。"
+    ].join("\n");
+  }
+
+  function followUpSystemPrompt() {
+    return [
+      "你是一位延续同一次牌局的专业塔罗师。回答追问时，只能基于已经抽到的牌和刚才的解读继续说明，不要重新抽牌。",
+      "回答要像真人咨询：先直接回答，再解释依据是哪几张牌和哪个牌位，最后给一个具体建议。",
+      "如果用户的问题很宽泛，帮用户把问题拆成更清楚的判断点。",
+      "不要堆砌术语，不要重复整篇解读，不要保证未来一定发生。中文回答，简洁但有信息量。"
+    ].join("\n");
+  }
+
   function localReading() {
-    const opening = `这次牌阵的核心，是“${state.drawn[0].name}”带出的主题：${state.drawn[0].meaning}`;
-    const lines = state.drawn.map((card) => `${card.position}上出现${card.name}${card.reversed ? "逆位" : "正位"}，说明${card.meaning}${card.reversed ? " 逆位让它更像一个需要被调整、松绑或重新理解的课题。" : ""}`);
-    return [opening, ...lines, "整合建议：不要急着把所有答案一次性定死。先选择最能推进现实的一步，让下一张牌在行动之后显现。"].join("\n\n");
+    const lead = state.drawn[0];
+    const opening = `一句话结论：这次牌面最先提醒你的，是把注意力放回“${lead.keyword}”。它不是在给你一个绝对答案，而是在指出现在最值得处理的核心。`;
+    const overview = `牌阵整体：${state.spread.name}里，牌位之间要连起来看。前面的牌通常说明事情从哪里来，中间的牌指出你现在的卡点，后面的牌更像下一步的路标。`;
+    const lines = state.drawn.map((card) => {
+      const orientation = card.reversed ? "逆位" : "正位";
+      const advice = card.reversed ? "这表示这股能量现在不太顺，需要先调整用力方式、期待或边界。" : "这表示这股能量比较明显，可以作为你判断和行动的依据。";
+      return `${card.position}：${card.name}${orientation}。用白话说，${card.meaning} ${advice}`;
+    });
+    const actions = [
+      "综合建议：",
+      "1. 先把问题拆成一个本周能验证的小行动，不要只停在想象里。",
+      "2. 留意最让你反复纠结的地方，那通常就是牌面指出的关键变量。",
+      "3. 如果要继续追问，可以问“我现在最该做哪一步”或“这里最大的盲点是什么”。"
+    ].join("\n");
+    return [opening, overview, ...lines, actions].join("\n\n");
   }
 
   function switchView(view) {
